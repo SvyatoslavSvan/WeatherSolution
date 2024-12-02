@@ -1,5 +1,5 @@
 ﻿#!/bin/bash
 cd /app
-sleep 15
+sleep 30
 ./efbundle
 dotnet DataCoreModule.WEB.dll

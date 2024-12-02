@@ -4,10 +4,10 @@ services:
       context: ./Src/Modules
       dockerfile: /WeatherApi/Dockerfile
     ports:
-      - "7068:7068"
       - "5142:5142"
     environment:
       - ASPNETCORE_ENVIRONMENT=Release
+      - ASPNETCORE_URLS=http://0.0.0.0:5142
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     ports:
@@ -20,10 +20,10 @@ services:
       context: ./Src/Modules
       dockerfile: DataCore/Dockerfile
     ports:
-      - "1339:1339"
       - "1400:1400"  
     environment:
       - ASPNETCORE_ENVIRONMENT=Release
+      - ASPNETCORE_URLS=http://0.0.0.0:1400
     depends_on:
       - db
       - weather-api
@@ -33,9 +33,9 @@ services:
       context: ./Src/Modules/Auth
       dockerfile: Dockerfile
     ports:
-      - "1401:1401"
       - "1402:1402"
     environment:
       - ASPNETCORE_ENVIRONMENT=Release
+      - ASPNETCORE_URLS=http://0.0.0.0:1402
     depends_on:
       - db  
