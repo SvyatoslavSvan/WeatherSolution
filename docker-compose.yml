@@ -1,0 +1,41 @@
+services:
+  weather-api:
+    build: 
+      context: ./Src/Modules
+      dockerfile: /WeatherApi/Dockerfile
+    ports:
+      - "7068:7068"
+      - "5142:5142"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Release
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong4Password!
+  datacore:
+    build:
+      context: ./Src/Modules
+      dockerfile: DataCore/Dockerfile
+    ports:
+      - "1339:1339"
+      - "1400:1400"  
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Release
+    depends_on:
+      - db
+      - weather-api
+      - authorization-server
+  authorization-server:
+    build:
+      context: ./Src/Modules/Auth
+      dockerfile: Dockerfile
+    ports:
+      - "1401:1401"
+      - "1402:1402"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Release
+    depends_on:
+      - db  

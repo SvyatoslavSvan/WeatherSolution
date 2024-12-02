@@ -10,6 +10,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Modules", "Modules", "{0CEE7CD6-797D-450B-804F-65D193EA32DD}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DataCore", "DataCore", "{1D8938F8-C1DF-4E85-9377-44AE9FCF4D91}"
+	ProjectSection(SolutionItems) = preProject
+		Src\Modules\DataCore\Dockerfile = Src\Modules\DataCore\Dockerfile
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Auth", "Auth", "{9510BB48-024A-4B07-94EF-13296C7D5A11}"
 EndProject
@@ -32,6 +35,11 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WeatherApi", "WeatherApi", "{7CBE3161-8E48-46BA-99CA-B76B42EF9B5D}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WeatherForecast", "Src\Modules\WeatherApi\WeatherForecast.csproj", "{119F7144-E383-4ADE-AD79-A7FD6DD0646E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docker", "Docker", "{27B887EB-721C-449E-87E3-FE2CB821A570}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
