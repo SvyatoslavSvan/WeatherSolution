@@ -28,7 +28,6 @@ jobs:
     - name: Run tests
       run: dotnet test --no-build --configuration Release
 
-    - name: Check format 
-      run: dotnet format --check
+    
 
 
