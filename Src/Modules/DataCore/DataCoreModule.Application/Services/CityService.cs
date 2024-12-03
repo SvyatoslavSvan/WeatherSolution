@@ -34,7 +34,8 @@ public sealed class CityService(IUnitOfWorkAdapter unitOfWork, IMapper mapper)
         return city;
     }
 
-    public async Task<IList<City>> GetMonitoredCities() => await Repository.GetAllAsync(predicate: x => x.IsMonitored == true, disableTracking: false);
+    public async Task<IList<City>> GetMonitoredCities() =>
+        await Repository.GetAllAsync(predicate: x => x.IsMonitored == true, disableTracking: false);
 
 
 
