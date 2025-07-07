@@ -1,4 +1,5 @@
-﻿using AutoMapper;
+﻿using System.Collections.Concurrent;
+using AutoMapper;
 using DataCoreModule.Application.DTO;
 using DataCoreModule.Application.Interfaces;
 using DataCoreModule.Application.Interfaces.Base;
@@ -14,64 +15,36 @@ namespace DataCoreModule.Application.Services;
 public sealed class EnvironmentalMonitoringService(IServiceScopeFactory factory) : BackgroundService
 {
     private const int DefaultIntervalDays = 1;
-    private readonly List<City> _cities = [];
+    private readonly ConcurrentDictionary<Guid, City> _cities = [];
     private readonly object _lock = new();
     private TimeSpan _interval = TimeSpan.FromDays(DefaultIntervalDays);
 
-    public IEnumerable<City> Cities
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _cities.ToList();
-            }
-        }
-    }
+    public IEnumerable<City> Cities => _cities.Values.ToList();
 
     public async Task AddCity(string cityName)
     {
         using var scope = factory.CreateScope();
         var cityService = scope.ServiceProvider.GetRequiredService<ICityService>();
         var city = await cityService.UpsertMonitoringCityByName(cityName);
-        lock (_lock)
-        {
-            if (_cities.FirstOrDefault(x => x.Id == city.Id) == null)
-            {
-                _cities.Add(city);
-            }
-            else
-            {
-                throw new InvalidOperationException("Cannot add monitoring for existing city");
-            }
-        }
+        if (!_cities.TryAdd(city.Id, city))
+            throw new InvalidOperationException("Cannot add monitoring for existing city");
     }
 
     public async Task RemoveCity(string cityName)
     {
-        City? city;
-        lock (_lock)
-        {
-            city = _cities.FirstOrDefault(x => x.Name == cityName);
-            if (city == null)
-                throw new InvalidOperationException("Cannot remove not monitoring Service");
-            _cities.Remove(city);
-        }
-        await UpdateIsMonitoredForCity(city);
+        var cityToRemove = _cities.Values.FirstOrDefault(x => x.Name == cityName);
+        if (cityToRemove is null || !_cities.TryRemove(cityToRemove.Id, out _))
+            throw new InvalidOperationException("Cannot remove non-monitored city");
+        await UpdateIsMonitoredForCity(cityToRemove);
     }
 
-        
 
     public void ChangeIntervalDays(int days)
     {
         if (days >= DefaultIntervalDays)
-        {
             _interval = TimeSpan.FromDays(days);
-        }
         else
-        {
             throw new ArgumentException($"Interval Days cannot be lower than {DefaultIntervalDays}");
-        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -82,11 +55,10 @@ public sealed class EnvironmentalMonitoringService(IServiceScopeFactory factory)
         {
             using var scope = factory.CreateScope();
             var context = new ServiceContext(scope.ServiceProvider);
-            await WaitForCitiesIsNotEmpty(stoppingToken); //переделать через событие
+            await WaitForCitiesIsNotEmpty(stoppingToken);
             GetDateRangeForForecast(out var dateRange);
-            List<City> citiesSnapshot;
-            lock(_lock) citiesSnapshot = _cities.ToList();
-            if (lastDelayInterval != _interval) 
+            var citiesSnapshot = _cities.Values.ToList();
+            if (lastDelayInterval != _interval)
             {
                 await Task.Delay(_interval - lastDelayInterval, stoppingToken);
             }
@@ -95,6 +67,7 @@ public sealed class EnvironmentalMonitoringService(IServiceScopeFactory factory)
                 lastDelayInterval = _interval;
                 await InsertForecastForMonitoredCities(citiesSnapshot, dateRange, context);
             }
+
             await Task.Delay(_interval, stoppingToken);
         }
     }
@@ -110,28 +83,27 @@ public sealed class EnvironmentalMonitoringService(IServiceScopeFactory factory)
     private async Task AddExistingMonitoringCities()
     {
         using var scope = factory.CreateScope();
-        var monitoredCities = await scope.ServiceProvider.GetRequiredService<ICityService>().GetMonitoredCities();
-        lock (_lock)
-        {
-            _cities.AddRange(monitoredCities);
-        }
+        var monitoredCities = await scope.ServiceProvider
+            .GetRequiredService<ICityService>()
+            .GetMonitoredCities();
+
+        foreach (var city in monitoredCities) _cities.TryAdd(city.Id, city);
     }
 
     private async Task InsertForecastForMonitoredCities(List<City> citiesSnapshot, DateRange dateRange,
         ServiceContext serviceContext)
     {
-        foreach (var city in citiesSnapshot)
-        {
-            await ProcessForecastForCity(dateRange, city, serviceContext);
-        }
+        foreach (var city in citiesSnapshot) await ProcessForecastForCity(dateRange, city, serviceContext);
     }
 
-    private void GetDateRangeForForecast(out DateRange range) =>
-        range = new DateRange()
+    private void GetDateRangeForForecast(out DateRange range)
+    {
+        range = new DateRange
         {
             Start = DateTime.Today.Date,
             End = DateTime.Today.Date.AddDays(_interval.Days - 1)
         };
+    }
 
     private static async Task ProcessForecastForCity(DateRange range, City city, ServiceContext serviceContext)
     {
@@ -145,32 +117,36 @@ public sealed class EnvironmentalMonitoringService(IServiceScopeFactory factory)
         {
             lock (_lock)
             {
-                if (_cities.Count is not 0)
-                {
-                    break;
-                }
+                if (_cities.Count is not 0) break;
             }
+
             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
         }
     }
 
     private static async Task<IList<TemperatureAirQualityState>> GetForecastForCity(DateRange range, City city,
-        ServiceContext serviceContext) =>
-        await serviceContext.ExternalService.GetByDateRange(range, city.Name);
+        ServiceContext serviceContext)
+    {
+        return await serviceContext.ExternalService.GetByDateRange(range, city.Name);
+    }
 
     private static async Task InsertForecastForCity(IList<TemperatureAirQualityState> forecastForCity, City city,
-        ServiceContext serviceContext) =>
-        await serviceContext.EnvironmentalService.CreateRange(serviceContext.Mapper.Map<IList<EnvironmentalState>>(forecastForCity,
-            (opts) =>
-            {
-                opts.Items[ApplicationMappingProfile.cityKey] = city;
-            }));
+        ServiceContext serviceContext)
+    {
+        await serviceContext.EnvironmentalService.CreateRange(serviceContext.Mapper.Map<IList<EnvironmentalState>>(
+            forecastForCity,
+            opts => { opts.Items[ApplicationMappingProfile.cityKey] = city; }));
+    }
 
 
     private class ServiceContext(IServiceProvider serviceProvider)
     {
-        public IEnvironmentalStateExternalService ExternalService { get; } = serviceProvider.GetRequiredService<IEnvironmentalStateExternalService>();
-        public IService<EnvironmentalState> EnvironmentalService { get; } = serviceProvider.GetRequiredService<IEnvironmentalService>();
+        public IEnvironmentalStateExternalService ExternalService { get; } =
+            serviceProvider.GetRequiredService<IEnvironmentalStateExternalService>();
+
+        public IService<EnvironmentalState> EnvironmentalService { get; } =
+            serviceProvider.GetRequiredService<IEnvironmentalService>();
+
         public IMapper Mapper { get; } = serviceProvider.GetRequiredService<IMapper>();
     }
 }
